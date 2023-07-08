@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<style>
+			/* 雑に円を描く位置を決める */
+			.position1 {
+				position: fixed;
+				left: 25%;
+				top: 50%;
+			}
+			.position2 {
+				position: fixed;
+				right: 25%;
+				top: 50%;
+			}
+			.position3 {
+				position: fixed;
+				left: 50%;
+				bottom: 25%;
+			}
+			.position4 {
+				position: fixed;
+				left: 50%;
+				top: 25%;
+			}
+			/* 雑な円 */
+			.circle {
+				position: absolute;
+				width: 30px;
+				height: 30px;
+				border-radius: 50%;
+				background-color: blueviolet;
+			}
+		</style>
+	</head>
+	<body>
+		<button id="start">アニメーション開始</button>
+		<button id="pause">アニメーション中断</button>
+		<button id="end">アニメーション終了</button>
+
+		<div class="position1">
+			<div class="circle"></div>
+		</div>
+		<div class="position2">
+			<div class="circle"></div>
+		</div>
+		<div class="position3">
+			<div class="circle"></div>
+		</div>
+		<div class="position4">
+			<div class="circle"></div>
+		</div>
+	</body>
+	<script src="../animation.js"></script>
+	<script src="./main.js"></script>
+</html>
