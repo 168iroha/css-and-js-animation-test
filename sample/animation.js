@@ -14,10 +14,13 @@ class CSSEffect {
 	#animationList = [];
 	/** @type { string[] } トランジション対象のプロパティ名のリスト */
 	#transitionList = [];
-	/** @type { Promise<AnimationTree>? } 現在実行中のアニメーションのPromise  */
+	/** @type { Promise<AnimationTree>? } 現在実行中のアニメーションのPromise */
 	#currentPromise = null;
 	/** @type { AnimationPlayState } アニメーションの状態 */
 	#playState = 'idle';
+
+	/** @type { ((v: CSSEffect) => void) | undefined } CSSEffectに関するPromise解決を通知する関数 */
+	#resolveEffect = undefined;
 
 	/**
 	 * CSSによるエフェクトの定義
@@ -54,65 +57,63 @@ class CSSEffect {
 	}
 
 	/**
+	 * @param { TransitionEvent } e  
+	 */
+	#pushTransitionEvent = e => {
+		if (!this.#transitionList.includes(e.propertyName)) {
+			this.#transitionList.push(e.propertyName);
+		}
+	};
+	/**
+	 * @param { AnimationEvent } e  
+	 */
+	#animationEndEvent = e => {
+		this.#animationList = this.#animationList.filter(x => x !== e.animationName);
+		if (this.#animationList.length === 0) {
+			// 全てのアニメーションイベントが完了したらそれを通知する
+			// finishで終了した場合はPromise解決するためにトランジションも削除する
+			if (this.#playState === 'finished') {
+				this.#transitionList = [];
+			}
+			if (this.#transitionList.length === 0) {
+				this.#resolveEffect(this);
+			}
+		}
+	};
+	/**
+	 * @param { TransitionEvent } e  
+	 */
+	#transitionEndEvent = e => {
+		this.#transitionList = this.#transitionList.filter(x => x !== e.propertyName);
+		if (this.#transitionList.length === 0) {
+			// 全てのトランジションイベントが完了したらそれを通知する
+			if (this.#animationList.length === 0) {
+				this.#resolveEffect(this);
+			}
+		}
+	};
+	#deleteTransitionStartEvent = () => {
+		this.#element.removeEventListener('transitionrun', this.#pushTransitionEvent);
+		if (this.#transitionList.length === 0 && this.#animationList.length === 0) {
+			this.#resolveEffect(this);
+		}
+	};
+
+	/**
 	 * アニメーションを実行する(Promise生成部)
 	 */
 	#exec() {
 		let state = false;
-		let resolveEffect = v => { state = true; };
+		this.#resolveEffect = v => { state = true; };
 
-		/** @type { boolean } トランジション開始イベントが実行されたか */
-		let transitionStartEventFlag = false;
-		/**
-		 * @param { TransitionEvent } e  
-		 */
-		const pushTransitionEvent = e => {
-			transitionStartEventFlag = true;
-			if (!this.#transitionList.includes(e.propertyName)) {
-				this.#transitionList.push(e.propertyName);
-			}
-		};
-		/**
-		 * @param { AnimationEvent } e  
-		 */
-		const animationEndEvent = e => {
-			this.#animationList = this.#animationList.filter(x => x !== e.animationName);
-			if (this.#animationList.length === 0) {
-				// 全てのアニメーションイベントが完了したらそれを通知する
-				this.#element.removeEventListener('animationend', animationEndEvent);
-				// finishで終了した場合はPromise解決するためにトランジションも削除する
-				if (this.#playState === 'finished') {
-					this.#transitionList = [];
-				}
-				if (this.#transitionList.length === 0) {
-					resolveEffect(this);
-				}
-			}
-		};
-		/**
-		 * @param { TransitionEvent } e  
-		 */
-		const transitionEndEvent = e => {
-			this.#transitionList = this.#transitionList.filter(x => x !== e.propertyName);
-			if (this.#transitionList.length === 0) {
-				// 全てのトランジションイベントが完了したらそれを通知する
-				this.#element.removeEventListener('transitionend', transitionEndEvent);
-				if (this.#animationList.length === 0) {
-					resolveEffect(this);
-				}
-			}
-		};
-		const deleteTransitionStartEvent = () => {
-			this.#element.removeEventListener('transitionstart', pushTransitionEvent);
-			this.#element.removeEventListener('transitionrun', pushTransitionEvent);
-			if (this.#transitionList.length === 0 && this.#animationList.length === 0) {
-				resolveEffect(this);
-			}
-		};
 		const createPromise = () => {
 			this.#firstTime = false;
+			this.#element.addEventListener('animationend', this.#animationEndEvent);
+			this.#element.addEventListener('transitionend', this.#transitionEndEvent);
+			this.#element.addEventListener('transitioncancel', this.#transitionEndEvent);
+
 			// トランジション対象の捕捉のためのイベントを設置
-			this.#element.addEventListener('transitionstart', pushTransitionEvent);
-			this.#element.addEventListener('transitionrun', pushTransitionEvent);
+			this.#element.addEventListener('transitionrun', this.#pushTransitionEvent);
 
 			// アニメーション対象の取得
 			const prevStyle = getComputedStyle(this.#element);
@@ -125,28 +126,21 @@ class CSSEffect {
 			}
 			const nextAnimationList =  getComputedStyle(this.#element).animationName.split(',').map(x => x.trim());
 			this.#animationList = nextAnimationList.filter(x => prevAnimationList.indexOf(x) === -1);
-
 			if (prevStyle.transitionDuration !== '0s') {
 				// 何かしらトランジションが存在する可能性がある場合は捕捉を行う
-				let cnt = 0;
-				const f = () => {
-					// 適当に最大2フレームだけトランジションを捕捉するようにする
-					if (++cnt < 2 && !transitionStartEventFlag) {
-						requestAnimationFrame(f);
-					}
-					else {
-						transitionStartEventFlag = true;
-					}
-		
-					// イベントの破棄
-					if (transitionStartEventFlag) {
-						deleteTransitionStartEvent();
-					}
-				};
-				requestAnimationFrame(f);
+				requestAnimationFrame(() => {
+					// スタイルの計算前
+					requestAnimationFrame(() => {
+						// スタイルの計算後
+						requestAnimationFrame(() => {
+							// スタイルの計算後
+							this.#deleteTransitionStartEvent();
+						});
+					});
+				});
 			}
 			else {
-				deleteTransitionStartEvent();
+				this.#deleteTransitionStartEvent();
 			}
 
 			// CSSアニメーションが存在すればplayする
@@ -154,9 +148,6 @@ class CSSEffect {
 				this.#element.style.animationPlayState = this.#playState;
 			}
 		};
-
-		this.#element.addEventListener('animationend', animationEndEvent);
-		this.#element.addEventListener('transitionend', transitionEndEvent);
 		
 		// CSSクラスをアタッチしてアニメーションの対象を捕捉する
 		if (!this.#firstTime) {
@@ -170,7 +161,9 @@ class CSSEffect {
 				this.#element.classList.add(...this.#classList);
 			}
 			requestAnimationFrame(() => {
+				// スタイルの計算前
 				requestAnimationFrame(() => {
+					// スタイルの計算後
 					createPromise();
 				});
 			});
@@ -180,7 +173,7 @@ class CSSEffect {
 		}
 
 		return new Promise((resolve, reject) => {
-			resolveEffect = resolve;
+			this.#resolveEffect = resolve;
 			if (state) {
 				// Promiseのresolve設定時点で解決していた場合は即解決とする
 				resolve(this);
@@ -190,6 +183,9 @@ class CSSEffect {
 			this.#currentPromise = null;
 			this.#playState = 'finished';
 			this.#element.style.animationPlayState = this.#playState;
+			this.#element.removeEventListener('animationend', this.#animationEndEvent);
+			this.#element.removeEventListener('transitionend', this.#transitionEndEvent);
+			this.#element.removeEventListener('transitioncancel', this.#transitionEndEvent);
 			return x;
 		});
 	}
@@ -214,6 +210,7 @@ class CSSEffect {
 		const prevState = this.#playState;
 		this.#playState = 'running';
 		this.#element.style.animationDuration = '';
+		this.#element.style.transition = '';
 		if (prevState === 'idle' || prevState === 'finished') {
 			this.#currentPromise = this.#exec();
 		}
@@ -229,8 +226,14 @@ class CSSEffect {
 	finish() {
 		this.#playState = 'finished';
 		// Animation APIとは異なりplay-stateにfinishが存在しないため以下で代替
-		this.#element.style.animationDuration = '0s';
-		this.#element.style.animationPlayState = 'running';
+		if (this.#animationList.length !== 0) {
+			this.#element.style.animationDuration = '0s';
+			this.#element.style.animationPlayState = 'running';
+		}
+		// トランジションも強制終了させてPromiseを解決させる
+		this.#element.style.transition = 'unset';
+		this.#transitionList = [];
+		this.#deleteTransitionStartEvent();
 	}
 }
 
@@ -284,6 +287,19 @@ class AnimationTree {
 	}
 
 	/**
+	 * 現在実行中のアニメーションを追加する
+	 * @param { AnimationElementEffect } e アニメーション要素
+	 */
+	#pushAnimation(e) {
+		if (e instanceof AnimationTree || e instanceof CSSEffect) {
+			this.#currentAnimationList.push(e);
+		}
+		if (e instanceof AnimationEffect) {
+			this.#currentAnimationList.push(new Animation(e));
+		}
+	};
+
+	/**
 	 * アニメーションを実行する(Promise生成部)
 	 */
 	async #exec() {
@@ -292,21 +308,12 @@ class AnimationTree {
 			throw new Error('アニメーション実施中のものに対して実施を行うことはできません');
 		}
 
-		const pushAnimation = e => {
-			if (e instanceof AnimationTree || e instanceof CSSEffect) {
-				this.#currentAnimationList.push(e);
-			}
-			if (e instanceof AnimationEffect) {
-				this.#currentAnimationList.push(new Animation(e));
-			}
-		};
-
 		for (; this.#currentAnimationIndex < this.#effectList.length; ++this.#currentAnimationIndex) {
 			this.#currentAnimationList = [];
 			const animation = this.#effectList[this.#currentAnimationIndex];
 			if (Array.isArray(animation)) {
 				// 並列に実行されるアニメーションを積む
-				animation.forEach(e => pushAnimation(e));
+				animation.forEach(e => this.#pushAnimation(e));
 			}
 			else if (animation instanceof Function) {
 				// 関数要素を実行する
@@ -314,7 +321,7 @@ class AnimationTree {
 			}
 			else {
 				// 逐次に実行されるアニメーションを積む
-				pushAnimation(animation);
+				this.#pushAnimation(animation);
 			}
 			this.#currentAnimationList.forEach(e => e.play());
 			const promise = Promise.all(this.#currentAnimationList.map(e => e.finished));
