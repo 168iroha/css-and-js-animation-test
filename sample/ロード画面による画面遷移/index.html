@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<style>
+			/* フェードアウトのための適当な定義 */
+			#page-body > div {
+				transition: opacity 300ms;
+			}
+			.fade-out {
+				opacity: 0;
+			}
+		</style>
+	</head>
+	<body>
+		<nav>
+			<hr>
+			<button id="show-page1">ページ1の表示</button>
+			<button id="show-page2">ページ2の表示</button>
+			<button id="show-page3">ページ3の表示</button>
+			<button id="load-data">データの読み込み</button>
+			<hr>
+		</nav>
+
+		<main id="page-body" style="position: relative;"><div></div><div id="loading"></div></main>
+	</body>
+	<script src="../animation.js"></script>
+	<script src="../switching.js"></script>
+	<script>
+		const suspendGroupOnDOM = new SuspendGroupOnDOM((() => {
+			// 表示対象の要素の生成
+			const element = document.createElement('div');
+			element.innerText = 'loading...';
+			element.style.color = 'white';
+			element.style.position = 'absolute';
+			element.style.top = '0';
+			element.style.left = '0';
+			element.style.width = '100%';
+			element.style.backgroundColor = 'grey';
+			element.className = 'fade-out';
+			return element;
+		})(), document.getElementById('loading'));
+		// ロード中のページの定義
+		const loadingPage = suspendGroupOnDOM.switchingPage;
+		// フェードアウトイベントの定義
+		loadingPage.beforeSwiching = element => {
+			const effectFadeOut = new CSSEffect(element, ['fade-out'], true);
+			effectFadeOut.play();
+			ctx.resolve(effectFadeOut.finished);
+		};
+		// フェードインイベントの定義
+		loadingPage.afterSwiching = element => {
+			const effectFadeIn = new CSSEffect(element, ['fade-out'], false);
+			effectFadeIn.play();
+			ctx.resolve(effectFadeIn.finished);
+		};
+		suspendGroupOnDOM.switchingPage = loadingPage;
+
+		const switchingPage = new SwitchingPage(suspendGroupOnDOM, document.querySelector('#page-body > div'));
+
+		// ページ取得に時間を掛けるためのsleep
+		const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+		/**
+		 * ページを生成する
+		 * @param { string } text ページで表示するテキスト
+		 * @param { number } ms ページ取得にかける時間(ms)
+		 */
+		const createPage = (text, ms) => async () => {
+			// 表示対象の要素の生成
+			const element = document.createElement('div');
+			element.innerText = text;
+			element.style.color = 'white';
+			element.style.backgroundColor = 'black';
+			//element.className = 'fade-out';
+			await sleep(ms);
+			return element;
+		};
+
+		// ページ切り替え処理
+		for (const page of ['page1', 'page2', 'page3']) {
+			document.getElementById(`show-${page}`).addEventListener('click', () => {
+				switchingPage.switching(createPage(page, 1000));
+			});
+		}
+		// データ取得処理(実際には取得しない)
+		document.getElementById('load-data').addEventListener('click', () => {
+			suspendGroupOnDOM.capture(function* () {
+				yield ctx.resolve(sleep(2000));
+			})
+		});
+	</script>
+</html>

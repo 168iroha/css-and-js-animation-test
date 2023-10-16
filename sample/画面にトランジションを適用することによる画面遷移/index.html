@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<style>
+			/* フェードアウトのための適当な定義 */
+			#page-body > div {
+				transition: opacity 300ms;
+			}
+			.fade-out {
+				opacity: 0;
+			}
+		</style>
+	</head>
+	<body>
+		<nav>
+			<hr>
+			<button id="show-page1">ページ1の表示</button>
+			<button id="show-page2">ページ2の表示</button>
+			<button id="show-page3">ページ3の表示</button>
+			<hr>
+		</nav>
+
+		<main id="page-body"><div></div></main>
+	</body>
+	<script src="../animation.js"></script>
+	<script src="../switching.js"></script>
+	<script>
+		const suspendGroup = new SuspendGroup();
+		const switchingPage = new SwitchingPage(suspendGroup, document.querySelector('#page-body > div'));
+		// フェードアウトイベントの定義
+		switchingPage.beforeSwiching = element => {
+			const effectFadeOut = new CSSEffect(element, ['fade-out'], true);
+			effectFadeOut.play();
+			ctx.resolve(effectFadeOut.finished);
+		};
+		// フェードインイベントの定義
+		switchingPage.afterSwiching = element => {
+			const effectFadeIn = new CSSEffect(element, ['fade-out'], false);
+			effectFadeIn.play();
+			ctx.resolve(effectFadeIn.finished);
+		};
+
+		// ページ取得に時間を掛けるためのsleep
+		const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+		/**
+		 * ページを生成する
+		 * @param { string } text ページで表示するテキスト
+		 * @param { number } ms ページ取得にかける時間(ms)
+		 */
+		const createPage = (text, ms) => async () => {
+			// 表示対象の要素の生成
+			const element = document.createElement('div');
+			element.innerText = text;
+			element.style.color = 'white';
+			element.style.backgroundColor = 'black';
+			element.className = 'fade-out';
+			await sleep(ms);
+			return element;
+		};
+
+		// ページ切り替え処理
+		for (const page of ['page1', 'page2', 'page3']) {
+			document.getElementById(`show-${page}`).addEventListener('click', () => {
+				switchingPage.switching(createPage(page, 1000));
+			});
+		}
+	</script>
+</html>
