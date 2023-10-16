@@ -110,7 +110,6 @@ class CSSEffect {
 			this.#firstTime = false;
 			this.#element.addEventListener('animationend', this.#animationEndEvent);
 			this.#element.addEventListener('transitionend', this.#transitionEndEvent);
-			this.#element.addEventListener('transitioncancel', this.#transitionEndEvent);
 
 			// トランジション対象の捕捉のためのイベントを設置
 			this.#element.addEventListener('transitionrun', this.#pushTransitionEvent);
@@ -185,7 +184,6 @@ class CSSEffect {
 			this.#element.style.animationPlayState = this.#playState;
 			this.#element.removeEventListener('animationend', this.#animationEndEvent);
 			this.#element.removeEventListener('transitionend', this.#transitionEndEvent);
-			this.#element.removeEventListener('transitioncancel', this.#transitionEndEvent);
 			return x;
 		});
 	}
