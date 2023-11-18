@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+	<body>
+		<input id="input" value="item 4"><button id="add">要素の追加</button><button id="delete">要素の削除</button>
+		<ul id="list">
+			<li>item 1</li>
+			<li>item 2</li>
+			<li>item 3</li>
+		</ul>
+	</body>
+	<script>
+		/**
+		 * FLIPによるアニメーションを実施する
+		 * @param { { element: HTMLElement; animation?: Animation }[] } nodeList アニメーションを行う対象のDOMノードのリスト
+		 * @param { (nodeList: { element: HTMLElement; animation?: Animation }[]) => unknown } callback アニメーション後の終了状態を計算する関数
+		 * @param { KeyframeAnimationOptions } easing イージング
+		 */
+		function flip(nodeList, callback, easing) {
+			// First
+			const firstStateList = nodeList.map(node => node.element.getBoundingClientRect());
+			callback(nodeList);
+			// Last
+			const lastStateList = nodeList.map(node => node.element.getBoundingClientRect());
+			// Invert&Play
+			nodeList.forEach((node, idx) => {
+				const moveX = firstStateList[idx].left - lastStateList[idx].left;
+				const moveY = firstStateList[idx].top - lastStateList[idx].top;
+				if (moveX !== 0 || moveY !== 0) {
+					node.animation = node.element.animate([
+						{ transform: `translate(${moveX}px, ${moveY}px)` },
+						{ transform: 'translate(0, 0)' }
+					], easing);
+				}
+			});
+		}
+		
+		/** @type { HTMLInputElement } */
+		const inputNode = document.getElementById('input');
+		/** @type { { element: HTMLElement; animation?: Animation }[] } DOMノードとアニメーションのリスト */
+		let nodeList = [];
+		const listNode = document.getElementById('list');
+		for (const child of listNode.querySelectorAll('li')) {
+			nodeList.push({ element: child });
+		}
+		// 要素を挿入する
+		document.getElementById('add').addEventListener('click', e => {
+			// リストの挿入位置
+			const p = Math.floor(Math.random() * (nodeList.length + 1));
+			// 挿入するノード
+			const li = document.createElement('li');
+			li.innerText = inputNode.value;
+			// 既存の要素のついてFLIPによるアニメーションの発火
+			flip(nodeList, nodeList => {
+				listNode.insertBefore(li, nodeList?.[p]?.element);
+				for (let i = p; i < nodeList.length; ++i) {
+					nodeList[i].animation?.cancel();
+				}
+			}, { duration: 300, easing: 'ease-out' });
+			// 新規要素についてアニメーションの発火(キャンセル不可)
+			li.animate([
+				{ transform: 'translateX(30px)', opacity: '0' },
+				{ transform: 'translateX(0)', opacity: '1' }
+			], { duration: 300, easing: 'ease-out' });
+			nodeList.splice(p, 0, { element: li });
+		});
+		// 要素を削除する
+		document.getElementById('delete').addEventListener('click', e => {
+			if (nodeList.length === 0) {
+				return;
+			}
+			// リストの削除位置
+			const p = Math.floor(Math.random() * nodeList.length);
+			// 削除するノード
+			const li = nodeList[p].element;
+			// 既存の要素のついてFLIPによるアニメーションの発火
+			flip(nodeList, nodeList => {
+				for (let i = p; i < nodeList.length; ++i) {
+					nodeList[i].animation?.cancel();
+				}
+				// 削除する要素はレイアウトから浮かせる
+				li.style.position = 'absolute';
+			}, { duration: 300, easing: 'ease-out' });
+			// 削除する要素についてアニメーションの発火(キャンセル不可)
+			nodeList[p].element.animate([
+				{ transform: 'translateX(0)', opacity: '1' },
+				{ transform: 'translateX(30px)', opacity: '0' }
+			], { duration: 300, easing: 'ease-out' }).finished.then(() => { li.remove(); });
+			nodeList.splice(p, 1);
+		});
+	</script>
+</html>
